@@ -1095,18 +1095,47 @@ A second built-in pack, `hello-pd` (`backend: com.upi.backend.libpd`),
   and links clean** (`nm` shows `_upi_pd_backend_entry`, libpd statically
   linked, no dylib dependency).
 
-**Pending:** `auval` + the render/state/MPE/pd smokes could not be re-run to
-green because this dev machine's ad-hoc-extension hosting subsystem got wedged
-during a long debugging session (`lsregister -kill` + repeated
-`killall -9 pkd` / crash-kill cycles) — a notarized third-party AUv3 still
-validates, but `com.upi.app.UPIInstrument` (and even a fresh test subtype)
-`OpenAComponent`-fails with `-10863` / SIGKILL, no crash report. This clears on
-logout/reboot. **Re-run `tools/smoke.sh` after a restart** to confirm Phase 0
-still green and Phase 0.5 renders.
+**Resolved (2026-09-03, after reboot):** `tools/smoke.sh` is fully green in
+Debug + Release — `auval` SUCCEEDED plus render / state / MPE / **Pd** smokes.
+One real bug surfaced on the first green run: the Swift AU never passed a
+resource resolver into `upi_kernel_set_backend`, so `PdBackend::prepare()`
+couldn't locate its patch and rendered silence. Fixed: `ResourceResolverBox` in
+`UPIInstrumentAudioUnit` maps pack resource keys → absolute paths; the kernel
+retains the resolver + ctx so re-`prepare()` (from `allocateRenderResources`)
+still resolves; `pd_prepare` keeps an already-open patch when re-prepared
+without a resolver.
 
 ---
 
 # Phase 1 Deliverables
+
+> **Progress (2026-09-03):** backend decision = **Pd patch first** (libpd), not
+> MRT2 — Magenta RT is a generative loop model (≈2 s latency, no note input, no
+> MLX artifact) and belongs in Phase 2/3 as the distillation *teacher*, not the
+> Phase 1 playable instrument. DDSP-style is slated as the first *neural*
+> backend after this. This pass = extension + pack only (App Store UI / App↔
+> Runtime bridge deferred — still blocked on the Ravel repo URL + web toolchain).
+>
+> **Done, `tools/smoke.sh` green (adds `identity-smoke`):**
+> - **Identity Layer** (1-D pass-through): `ControlFrame.identity[]` /
+>   `macros[]` populated from kernel atomics; `upi_kernel_set_identity` added,
+>   `upi_kernel_set_macro` wired. `MacroDef` gains `identityAxis` (a macro
+>   targets a backend param, an identity axis, or the bare macro bus). Swift AU
+>   publishes one AU parameter per identity axis + per bare macro
+>   (`idaxis_<id>` / `macrobus_<id>` — no dots: `AUParameterNode` rejects them);
+>   presets round-trip macro positions by id.
+> - **Pack loader hardening**: `InstrumentPack.validate(extensionVersion:)` —
+>   schema version, `minExtensionVersion` gate (engine now `1.0.0`), macro/axis
+>   sanity, resource existence; unknown-backend → "update UPI". Bad packs refuse
+>   to load with a logged reason.
+> - **`PdBackend`** also sends `[r identity]` + `[r macro0..N]` (positional).
+> - **`chocolate-trumpet` pack**: `com.upi.backend.libpd`, one identity axis
+>   `brass_reed` (Trumpet↔Clarinet), 5 macros. `backend/chocolate-trumpet.pd` =
+>   saw↔square morph on identity, brightness→lowpass, air→noise, attack→env
+>   slew, expression→gain. Bundled alongside the hello packs.
+>
+> **Not yet:** the real "learned acoustic identity" (that's the DDSP/neural
+> pass); App library/store UI; Runtime bridge; artwork; DAW listen test.
 
 ## Extension
 

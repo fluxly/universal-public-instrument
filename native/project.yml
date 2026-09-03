@@ -125,7 +125,7 @@ targets:
           set -euo pipefail
           DEST="${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}"
           mkdir -p "$DEST"
-          for pack in hello-sine hello-pd; do
+          for pack in hello-sine hello-pd chocolate-trumpet; do
             rsync -a --delete "${SRCROOT}/../instrument-packs/${pack}" "$DEST/"
           done
 

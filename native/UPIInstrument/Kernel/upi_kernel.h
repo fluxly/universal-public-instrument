@@ -50,7 +50,14 @@ float    upi_kernel_get_parameter(UPIKernel *k, uint32_t address);
 
 /* Extension-owned controls (not backend parameters). */
 void upi_kernel_set_mpe_bend_range(UPIKernel *k, float semitones);
+
+/* Macro bus: value published in ControlFrame.macros[index] each block. Index
+ * order matches instrument.json "macros". Out-of-range indices are ignored. */
 void upi_kernel_set_macro(UPIKernel *k, uint32_t macro_index, float value01);
+
+/* Identity Layer input. Phase 1 is 1-D pass-through: dim 0 carries the single
+ * identity-axis position (0..1). Published in ControlFrame.identity[dim]. */
+void upi_kernel_set_identity(UPIKernel *k, uint32_t dim, float value);
 
 /* Realtime. Parses `event_list` (may be NULL), updates the control frame,
  * renders into `out`. Events are currently applied at block start (no

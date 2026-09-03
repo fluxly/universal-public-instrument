@@ -41,6 +41,8 @@ struct PdBackend {
     // last-seen voice-0 state, for change detection
     int32_t lastNoteId = -1;
     float   lastGate = -1.f, lastPitch = -1.f, lastVel = -1.f;
+    float   lastIdentity = -2.f;                    // out-of-range → forces first send
+    float   lastMacro[UPI_MACRO_COUNT];             // init in prepare()
 
     size_t ringCount() const { return (ringHead + ringCap - ringTail) % ringCap; }
 
@@ -121,6 +123,8 @@ int32_t pd_prepare(UPIBackend *self, const UPIBackendConfig *cfg) {
     b->tickOut.assign((size_t)b->pdBlock * b->channelCount, 0.0f);
 
     b->lastNoteId = -1; b->lastGate = b->lastPitch = b->lastVel = -1.f;
+    b->lastIdentity = -2.f;
+    for (float &m : b->lastMacro) m = -1.f;
     return 0;
 }
 
@@ -132,6 +136,8 @@ void pd_reset(UPIBackend *self) {
     b->ringHead = b->ringTail = 0;
     std::fill(b->ring.begin(), b->ring.end(), 0.0f);
     b->lastGate = -1.f;
+    b->lastIdentity = -2.f;
+    for (float &m : b->lastMacro) m = -1.f;
 }
 
 void pd_get_capabilities(UPIBackend *, UPIBackendCapabilities *out) {
@@ -174,6 +180,21 @@ void pd_render(UPIBackend *self, const UPIControlFrame *cf,
     if (pitch != b->lastPitch) { libpd_float("pitch", pitch); b->lastPitch = pitch; }
     if (vel   != b->lastVel)   { libpd_float("vel",   vel);   b->lastVel = vel; }
     if (gate  != b->lastGate)  { libpd_float("gate",  gate);  b->lastGate = gate; }
+
+    // --- identity axis 0 + macro bus, sent on change as [r identity]/[r macroN] ---
+    if (cf->identity[0] != b->lastIdentity) {
+        libpd_float("identity", cf->identity[0]);
+        b->lastIdentity = cf->identity[0];
+    }
+    static const char *kMacroRecv[UPI_MACRO_COUNT] = {
+        "macro0", "macro1", "macro2", "macro3", "macro4", "macro5", "macro6", "macro7"
+    };
+    for (uint32_t i = 0; i < UPI_MACRO_COUNT; ++i) {
+        if (cf->macros[i] != b->lastMacro[i]) {
+            libpd_float(kMacroRecv[i], cf->macros[i]);
+            b->lastMacro[i] = cf->macros[i];
+        }
+    }
 
     // --- render enough Pd ticks to satisfy `frames` ---
     while (b->ringCount() < (size_t)frames * b->channelCount) {

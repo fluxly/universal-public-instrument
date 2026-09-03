@@ -32,11 +32,12 @@ pluginkit -a "$APP/Contents/PlugIns/UPIInstrument.appex"
 sleep 2
 auval -v aumu UPIi UPI_ | tail -3
 
-echo "### 5/5  render / state / MPE / Pd smoke tests"
+echo "### 5/5  render / state / MPE / Pd / identity smoke tests"
 swift tools/render-smoke.swift
 swift tools/state-smoke.swift
 swift tools/mpe-smoke.swift
 swift tools/pd-smoke.swift
+swift tools/identity-smoke.swift
 
 echo
 echo "PHASE 0 SMOKE: all green"

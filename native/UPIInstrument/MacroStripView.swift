@@ -46,12 +46,19 @@ final class InstrumentModel: ObservableObject {
 
     func setMacro(_ macroId: String, _ value01: Double) {
         macroValues[macroId] = value01
-        guard let def = manifest?.macros.first(where: { $0.id == macroId }),
-              let paramId = def.parameter,
-              let param = parameter(withIdentifier: paramId) else { return }
-        let lo = Double(param.minValue), hi = Double(param.maxValue)
-        param.setValue(AUValue(lo + value01 * (hi - lo)), originator: observerToken)
-        syncParamRow(param)
+        guard let def = manifest?.macros.first(where: { $0.id == macroId }) else { return }
+
+        if let paramId = def.parameter, let param = parameter(withIdentifier: paramId) {
+            // macro drives a backend parameter: scale 0..1 into its range
+            let lo = Double(param.minValue), hi = Double(param.maxValue)
+            param.setValue(AUValue(lo + value01 * (hi - lo)), originator: observerToken)
+            syncParamRow(param)
+        } else if let axisId = def.identityAxis,
+                  let param = parameter(withIdentifier: "idaxis_\(axisId)") {
+            param.setValue(AUValue(value01), originator: observerToken)   // 0..1 axis position
+        } else if let param = parameter(withIdentifier: "macrobus_\(macroId)") {
+            param.setValue(AUValue(value01), originator: observerToken)   // bare macro bus
+        }
     }
 
     func setParam(_ address: AUParameterAddress, _ value: Double) {
@@ -74,14 +81,19 @@ final class InstrumentModel: ObservableObject {
                 ParamRow(id: $0.address, identifier: $0.identifier, name: $0.displayName,
                          min: Double($0.minValue), max: Double($0.maxValue), value: Double($0.value))
             }
-        // seed macro positions from their mapped parameters
+        // seed macro positions from their mapped parameters / axes
         var seeded: [String: Double] = [:]
         for def in manifest?.macros ?? [] {
-            guard let pid = def.parameter, let p = parameter(withIdentifier: pid) else {
-                seeded[def.id] = Double(def.defaultValue ?? 0); continue
+            if let pid = def.parameter, let p = parameter(withIdentifier: pid) {
+                let lo = Double(p.minValue), hi = Double(p.maxValue)
+                seeded[def.id] = hi > lo ? (Double(p.value) - lo) / (hi - lo) : 0
+            } else if let axisId = def.identityAxis, let p = parameter(withIdentifier: "idaxis_\(axisId)") {
+                seeded[def.id] = Double(p.value)
+            } else if let p = parameter(withIdentifier: "macrobus_\(def.id)") {
+                seeded[def.id] = Double(p.value)
+            } else {
+                seeded[def.id] = Double(def.defaultValue ?? 0)
             }
-            let lo = Double(p.minValue), hi = Double(p.maxValue)
-            seeded[def.id] = hi > lo ? (Double(p.value) - lo) / (hi - lo) : 0
         }
         macroValues = seeded
     }
@@ -175,7 +187,9 @@ struct MacroStripView: View {
 
     private func macroRow(_ macro: InstrumentManifest.MacroDef) -> some View {
         let value = model.macroValues[macro.id] ?? 0
-        let inert = (macro.parameter == nil)
+        // Every macro now routes somewhere: a backend param, an identity axis,
+        // or the macro bus (ControlFrame.macros[]). None are inert.
+        let inert = false
         return VStack(alignment: .leading, spacing: 3) {
             HStack {
                 Text(macro.label.uppercased())

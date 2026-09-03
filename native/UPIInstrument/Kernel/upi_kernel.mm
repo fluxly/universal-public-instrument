@@ -62,6 +62,7 @@ struct UPIKernel {
     int32_t      nextNoteId = 1;
     std::atomic<float> mpeBendRange{ 48.0f };  // semitones for full-scale bend
     std::atomic<float> macros[UPI_MACRO_COUNT];
+    std::atomic<float> identity[UPI_IDENTITY_DIMS];  // Identity Layer output
 
     // scratch buffers for planar render (channelCount * maxFrames)
     std::vector<float>  planar;
@@ -71,6 +72,7 @@ struct UPIKernel {
 
     UPIKernel() {
         for (auto &m : macros) m.store(0.0f, std::memory_order_relaxed);
+        for (auto &d : identity) d.store(0.0f, std::memory_order_relaxed);
         std::memset(&frame, 0, sizeof(frame));
         frame.version = UPI_CONTROL_FRAME_VERSION;
     }
@@ -182,7 +184,7 @@ struct UPIKernel {
         for (uint32_t i = 0; i < UPI_MACRO_COUNT; ++i)
             frame.macros[i] = macros[i].load(std::memory_order_relaxed);
         for (uint32_t i = 0; i < UPI_IDENTITY_DIMS; ++i)
-            frame.identity[i] = 0.0f;
+            frame.identity[i] = identity[i].load(std::memory_order_relaxed);
 
         const float bendRange = mpeBendRange.load(std::memory_order_relaxed);
 
@@ -312,6 +314,10 @@ void upi_kernel_set_mpe_bend_range(UPIKernel *k, float semitones) {
 
 void upi_kernel_set_macro(UPIKernel *k, uint32_t i, float v) {
     if (k && i < UPI_MACRO_COUNT) k->macros[i].store(v, std::memory_order_relaxed);
+}
+
+void upi_kernel_set_identity(UPIKernel *k, uint32_t dim, float v) {
+    if (k && dim < UPI_IDENTITY_DIMS) k->identity[dim].store(v, std::memory_order_relaxed);
 }
 
 void upi_kernel_render(UPIKernel *k,
