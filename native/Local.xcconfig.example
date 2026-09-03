@@ -1,0 +1,6 @@
+// Copy to native/Local.xcconfig (git-ignored) and fill in for a signed build.
+// Not needed for Phase 0 ad-hoc builds, auval, or local DAW testing.
+
+// DEVELOPMENT_TEAM = XXXXXXXXXX
+// CODE_SIGN_STYLE = Automatic
+// CODE_SIGN_IDENTITY = Apple Development

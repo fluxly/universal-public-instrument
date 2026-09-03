@@ -1,0 +1,138 @@
+name: UPI
+options:
+  bundleIdPrefix: com.upi
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+  defaultConfig: Debug
+
+configs:
+  Debug: debug
+  Release: release
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    ONLY_ACTIVE_ARCH: "YES"
+    # Phase 0: ad-hoc ("Sign to Run Locally"). tools/package.sh swaps in a real
+    # identity for distribution. No team / provisioning profile needed to build,
+    # run auval, or load in a local DAW.
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGNING_REQUIRED: "YES"
+    CODE_SIGNING_ALLOWED: "YES"
+    CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION: "YES"
+    ENABLE_HARDENED_RUNTIME: "NO"
+    CLANG_CXX_LANGUAGE_STANDARD: "c++17"
+    CLANG_CXX_LIBRARY: "libc++"
+    GCC_C_LANGUAGE_STANDARD: "c11"
+  configs:
+    Release:
+      SWIFT_COMPILATION_MODE: wholemodule
+
+targets:
+
+  # ---- backends: C/C++, compiled into the extension --------------------------
+  UPIBackends:
+    type: library.static
+    platform: macOS
+    sources:
+      - path: ../backends/OscillatorBackend
+      - path: ../backends/PdBackend
+      - path: ../backends/registry
+    settings:
+      base:
+        HEADER_SEARCH_PATHS:
+          - $(SRCROOT)/../backends/include
+          - $(SRCROOT)/../backends/OscillatorBackend
+          - $(SRCROOT)/../backends/PdBackend
+          - $(SRCROOT)/../backends/registry
+          - $(SRCROOT)/../third_party/libpd/libpd_wrapper
+          - $(SRCROOT)/../third_party/libpd/pure-data/src
+        GCC_PREPROCESSOR_DEFINITIONS:
+          - "$(inherited)"
+          - "PD=1"
+          - "PDINSTANCE=1"
+          - "PDTHREADS=1"
+        SKIP_INSTALL: "YES"
+
+  # ---- shared runtime framework (linked by extension, embedded by host) ------
+  UPIRuntime:
+    type: framework
+    platform: macOS
+    sources:
+      - path: UPIRuntime
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.upi.UPIRuntime
+        PRODUCT_NAME: UPIRuntime
+        DEFINES_MODULE: "YES"
+        SKIP_INSTALL: "YES"
+        GENERATE_INFOPLIST_FILE: "YES"
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        DYLIB_INSTALL_NAME_BASE: "@rpath"
+        LD_RUNPATH_SEARCH_PATHS:
+          - "@executable_path/../Frameworks"
+          - "@loader_path/Frameworks"
+
+  # ---- the one AUv3 app extension ------------------------------------------
+  UPIInstrument:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: UPIInstrument
+      - path: UPIInstrument/Kernel
+    dependencies:
+      - target: UPIBackends
+      - target: UPIRuntime
+        embed: true          # .appex carries its own copy of the framework
+        link: true
+        codeSign: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.upi.app.UPIInstrument
+        PRODUCT_NAME: UPIInstrument
+        PRODUCT_MODULE_NAME: UPIInstrument
+        INFOPLIST_FILE: UPIInstrument/Info.plist
+        # AUv3 UI extension: keep Swift reflection metadata + symbols so
+        # ExtensionKit / ViewBridge can bootstrap the principal class in
+        # optimized builds.
+        SWIFT_REFLECTION_METADATA_LEVEL: all
+        STRIP_INSTALLED_PRODUCT: "NO"
+        STRIP_SWIFT_SYMBOLS: "NO"
+        CODE_SIGN_ENTITLEMENTS: UPIInstrument/UPIInstrument.entitlements
+        SWIFT_OBJC_BRIDGING_HEADER: UPIInstrument/UPIInstrument-Bridging.h
+        SWIFT_INSTALL_OBJC_HEADER: "NO"
+        HEADER_SEARCH_PATHS:
+          - $(SRCROOT)/../backends/include
+          - $(SRCROOT)/../backends/registry
+          - $(SRCROOT)/UPIInstrument/Kernel
+        # libpd static lib (built by tools/build-libpd.sh, PD_MULTI)
+        OTHER_LDFLAGS:
+          - "$(inherited)"
+          - "$(SRCROOT)/../third_party/libpd/build/libpd.a"
+        LD_RUNPATH_SEARCH_PATHS:
+          - "@loader_path/../Frameworks"
+          - "@executable_path/../../../../Frameworks"
+        SKIP_INSTALL: "YES"
+    postCompileScripts:
+      - name: "Bundle Instrument Packs"
+        basedOnDependencyAnalysis: false
+        script: |
+          set -euo pipefail
+          DEST="${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}"
+          mkdir -p "$DEST"
+          for pack in hello-sine hello-pd; do
+            rsync -a --delete "${SRCROOT}/../instrument-packs/${pack}" "$DEST/"
+          done
+
+schemes:
+  UPIInstrument:
+    build:
+      targets:
+        UPIInstrument: all
+    run:
+      config: Debug

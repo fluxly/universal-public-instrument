@@ -1,0 +1,14 @@
+{
+  "name": "upi",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Universal Public Instrument — standalone app + AUv3 build",
+  "scripts": {
+    "dev": "cargo tauri dev",
+    "build": "cargo tauri build --bundles app",
+    "package": "cargo tauri build --bundles app && bash tools/package.sh",
+    "au": "bash tools/build-au.sh",
+    "smoke": "bash tools/smoke.sh",
+    "link-deps": "bash tools/link-third-party.sh"
+  }
+}

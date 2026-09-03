@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "com.upi.instrument.hello-sine",
+  "name": "Hello Sine",
+  "version": "0.1.0",
+  "backend": "com.upi.backend.oscillator",
+  "minExtensionVersion": "0.1",
+  "identityAxes": [],
+  "macros": [
+    { "id": "expression", "label": "Expression", "parameter": "gain",   "default": 0.8 },
+    { "id": "identity",   "label": "Identity",    "parameter": null },
+    { "id": "brightness", "label": "Brightness",  "parameter": "cutoff", "default": 1.0 },
+    { "id": "air",        "label": "Air",         "parameter": "noise",  "default": 0.0 },
+    { "id": "attack",     "label": "Attack",      "parameter": "attack", "default": 0.05 }
+  ],
+  "resources": {}
+}

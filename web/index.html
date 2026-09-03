@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Universal Public Instrument</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Silkscreen&family=Quantico:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <!-- Phase 0 stub. Real UI is built with Ravel web components once the
+       repo is symlinked in (tools/link-third-party.sh). See
+       docs/upi-app-spec.md "UI Architecture". -->
+  <main class="shell">
+    <header>
+      <span class="wordmark">UNIVERSAL&nbsp;PUBLIC&nbsp;INSTRUMENT</span>
+      <span class="phase">PHASE&nbsp;0</span>
+    </header>
+
+    <section class="card">
+      <h1>Workshop</h1>
+      <p class="text">
+        The standalone app lives here. Phase 0 ships the AUv3 extension only —
+        this window is a placeholder until the Ravel component set is wired in.
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>Audio Unit</h2>
+      <ul class="status">
+        <li><span class="dot" id="dot-embed"></span> Extension embedded in this app</li>
+        <li><span class="dot" id="dot-reg"></span> Registered with macOS (pluginkit)</li>
+      </ul>
+      <p class="text muted" id="hint"></p>
+      <code>auval -v aumu UPIi UPI_</code>
+    </section>
+  </main>
+
+  <script src="./main.js"></script>
+</body>
+</html>

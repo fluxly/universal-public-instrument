@@ -1,0 +1,83 @@
+/* Phase 0 stub styling. Follows docs/raveling-style-guide.md until Ravel's
+   own components / stylesheet are symlinked in. */
+
+:root {
+  --ink: #181818;
+  --surface: #303030;
+  --well: #222222;
+  --paper: #e6e2d3;
+  --white-paper: #ffffff;
+  --pencil: #666666;
+  --rule: rgba(102, 102, 102, 0.30);
+  --fluoro-lime: #a7ff00;
+  --fluoro-cyan: #00f0ff;
+  --fluoro-pink: #ff37a8;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: "Silkscreen", monospace;
+  -webkit-font-smoothing: antialiased;
+}
+
+.text { font-family: "Quantico", monospace, sans-serif; line-height: 1.5; }
+.muted { color: var(--pencil); }
+
+.shell {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+}
+
+header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 10px solid var(--rule);
+  padding-bottom: 14px;
+  margin-bottom: 24px;
+}
+
+.wordmark { font-size: 1rem; color: var(--paper); }
+.phase { font-size: 1rem; color: var(--fluoro-cyan); }
+
+.card {
+  background: var(--surface);
+  border-radius: 4px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+h1 { font-size: 1.25rem; margin: 0 0 12px; color: var(--white-paper); }
+h2 { font-size: 1rem; margin: 0 0 12px; color: var(--white-paper); }
+
+.status { list-style: none; padding: 0; margin: 0 0 12px; }
+.status li {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 0; font-size: 0.9rem;
+}
+
+.dot {
+  width: 12px; height: 12px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  flex: none;
+}
+.dot.ok  { background: var(--fluoro-lime); }
+.dot.bad { background: var(--fluoro-pink); }
+
+code {
+  display: inline-block;
+  font-family: "Silkscreen", monospace;
+  font-size: 0.8rem;
+  background: var(--well);
+  color: var(--paper);
+  padding: 8px 10px;
+  border-radius: 4px;
+  margin-top: 8px;
+  user-select: text;
+}

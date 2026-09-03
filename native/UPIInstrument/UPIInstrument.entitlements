@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Phase 0: sandbox only. The App Group (group.com.upi.shared) is added
+	     when the app starts downloading Instrument Packs for the extension to
+	     read; until then packs are bundled inside this .appex. -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+
+	<!-- Local development: lets AMFI load this ad-hoc-signed extension without a
+	     Developer ID. Dropped for notarized / App Store builds (tools/package.sh
+	     strips it when SIGN_IDENTITY is a real identity). -->
+	<key>com.apple.security.get-task-allow</key>
+	<true/>
+</dict>
+</plist>

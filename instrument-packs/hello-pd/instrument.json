@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "com.upi.instrument.hello-pd",
+  "name": "Hello Pd",
+  "version": "0.1.0",
+  "backend": "com.upi.backend.libpd",
+  "minExtensionVersion": "0.1",
+  "identityAxes": [],
+  "macros": [
+    { "id": "expression", "label": "Expression", "parameter": null },
+    { "id": "identity",   "label": "Identity",    "parameter": null },
+    { "id": "brightness", "label": "Brightness",  "parameter": null },
+    { "id": "air",        "label": "Air",         "parameter": null },
+    { "id": "attack",     "label": "Attack",      "parameter": null }
+  ],
+  "resources": {
+    "patch": "backend/hello.pd"
+  }
+}

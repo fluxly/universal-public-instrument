@@ -1,0 +1,7 @@
+CompileFlags:
+  Add:
+    - -I.
+    - -Ibackends/include
+    - -Ibackends/OscillatorBackend
+    - -Ibackends/registry
+    - -Inative/UPIInstrument/Kernel

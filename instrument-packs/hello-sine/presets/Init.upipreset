@@ -1,0 +1,23 @@
+{
+  "schemaVersion" : 1,
+  "packId" : "com.upi.instrument.hello-sine",
+  "name" : "Init",
+  "parameters" : {
+    "waveform" : 0,
+    "attack" : 0.005,
+    "decay" : 0.12,
+    "sustain" : 0.8,
+    "release" : 0.25,
+    "gain" : 0.8,
+    "glide" : 0,
+    "cutoff" : 1,
+    "noise" : 0
+  },
+  "macros" : {
+    "expression" : 0.8,
+    "brightness" : 1.0,
+    "air" : 0.0,
+    "attack" : 0.0125
+  },
+  "mpeBendRange" : 48
+}

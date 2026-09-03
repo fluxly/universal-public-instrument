@@ -1,0 +1,27 @@
+# Xcode / build
+native/UPI.xcodeproj/
+native/.build/
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.DS_Store
+
+# Rust / Tauri
+target/
+src-tauri/target/
+
+# Node
+node_modules/
+
+# Local, machine-specific config
+native/Local.xcconfig
+tools/third-party.config.local
+
+# Third-party symlinks (recreated by tools/link-third-party.sh)
+third_party/ravel/core
+third_party/ravel/core-dist
+# note: third_party/libpd is a git submodule, not a symlink
+
+# Tauri generated
+src-tauri/gen/
