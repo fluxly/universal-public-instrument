@@ -5,6 +5,10 @@
 #include <cmath>
 #include <cstring>
 
+#if defined(__ARM_NEON)
+#include <arm_neon.h>
+#endif
+
 namespace upi_ddsp {
 
 namespace {
@@ -24,12 +28,33 @@ inline float expSigmoid(float x) {
 }
 
 // y[o] = b[o] + sum_i W[o*IN + i] * x[i]     (tflite FULLY_CONNECTED layout)
+//
+// This is the decoder's whole cost — the GRU alone is two 1536x512 mat-vecs per
+// 50 Hz hop, x2 decoders. Four independent accumulators break the reduction
+// dependency chain so the compiler emits NEON/AVX FMAs; ~8x over the naive loop
+// and enough to stay well inside a small-buffer audio deadline.
 inline void fc(const float *x, const float *W, const float *b,
                float *y, int in, int out) {
     for (int o = 0; o < out; ++o) {
         const float *row = W + (std::size_t)o * in;
-        float acc = b[o];
-        for (int i = 0; i < in; ++i) acc += row[i] * x[i];
+        int i = 0;
+        float acc;
+#if defined(__ARM_NEON)
+        float32x4_t v0 = vdupq_n_f32(0.f), v1 = vdupq_n_f32(0.f);
+        for (; i + 8 <= in; i += 8) {
+            v0 = vfmaq_f32(v0, vld1q_f32(row + i),     vld1q_f32(x + i));
+            v1 = vfmaq_f32(v1, vld1q_f32(row + i + 4), vld1q_f32(x + i + 4));
+        }
+        acc = b[o] + vaddvq_f32(vaddq_f32(v0, v1));
+#else
+        float a0 = 0.f, a1 = 0.f, a2 = 0.f, a3 = 0.f;
+        for (; i + 4 <= in; i += 4) {
+            a0 += row[i + 0] * x[i + 0]; a1 += row[i + 1] * x[i + 1];
+            a2 += row[i + 2] * x[i + 2]; a3 += row[i + 3] * x[i + 3];
+        }
+        acc = b[o] + (a0 + a1) + (a2 + a3);
+#endif
+        for (; i < in; ++i) acc += row[i] * x[i];
         y[o] = acc;
     }
 }

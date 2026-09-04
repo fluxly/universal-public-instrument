@@ -184,8 +184,10 @@ struct DdspBackend {
         harmonic.render(ctl, hopHarm.data(), hopHost);
         noise.render(ctl.noiseBands, hopNoise.data(), hopHost);
 
-        for (int j = 0; j < hopHost; ++j)
-            hopHarm[j] = (hopHarm[j] + hopNoise[j] * noiseScale) * 0.5f;   // + headroom
+        for (int j = 0; j < hopHost; ++j) {
+            const float s = (hopHarm[j] + hopNoise[j] * noiseScale) * 0.5f;   // + headroom
+            hopHarm[j] = std::isfinite(s) ? s : 0.0f;
+        }
 
         ringPush(hopHarm.data(), (size_t)hopHost);
     }
@@ -237,9 +239,10 @@ int32_t ddsp_prepare(UPIBackend *self, const UPIBackendConfig *cfg) {
     b->env = AREnvelope{};
 
     // trained DDSP endpoints (identity 0 / 1). Both must load, else fall back
-    // to the analytic control model.
-    b->neural = false;
-    if (cfg->resolve_resource) {
+    // to the analytic control model. Weights don't depend on the sample rate,
+    // so a re-prepare (rate/blocksize change) keeps the already-loaded pair —
+    // no re-reading 15 MB off disk on every allocateRenderResources.
+    if (!b->neural && cfg->resolve_resource) {
         const char *pa = cfg->resolve_resource(cfg->resolver_ctx, "decoder_a");
         const char *pb = cfg->resolve_resource(cfg->resolver_ctx, "decoder_b");
         std::vector<char> ba, bb;

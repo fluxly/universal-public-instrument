@@ -19,6 +19,7 @@
 #include "ddsp_backend.h"
 #include "ddsp_fft.h"
 
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -186,6 +187,69 @@ int main() {
 
     vt->destroy(b);
 
+    // --- 44.1 kHz, hot input, reverb wide open: bounded + finite ----------
+    // (Logic commonly runs at 44.1 kHz; the smokes above are all 48 kHz.)
+    float peak441 = 0.f;
+    bool  finite441 = true;
+    {
+        UPIBackend* b2 = vt->create();
+        UPIBackendConfig c2; std::memset(&c2, 0, sizeof(c2));
+        c2.sample_rate = 44100.0; c2.max_frames = 512; c2.channel_count = 2;
+        c2.resolve_resource = ddsp_smoke_resolve;
+        if (vt->prepare(b2, &c2) != 0) { std::fprintf(stderr, "DDSP RENDER FAIL: prepare 44.1k\n"); return 1; }
+
+        float L2[512], R2[512]; float* o2[2] = { L2, R2 };
+        UPIControlFrame f2; std::memset(&f2, 0, sizeof(f2));
+        f2.version = UPI_CONTROL_FRAME_VERSION; f2.sample_rate = 44100.0;
+        f2.voice_count = 1;
+        f2.voices[0].note_id = 1; f2.voices[0].note = 69;
+        f2.voices[0].velocity = 1.0f; f2.voices[0].pitch_hz = 440.0f;
+        f2.macros[0] = 1.0f;   // expression max
+        f2.macros[2] = 0.7f; f2.macros[3] = 0.6f; f2.macros[4] = 0.0f;
+        f2.macros[5] = 0.85f;  // reverb wide open
+
+        for (int blk = 0; blk < 400; ++blk) {          // ~4.6 s, note held throughout
+            f2.voices[0].gate = 1;
+            std::memset(L2, 0, sizeof(L2)); std::memset(R2, 0, sizeof(R2));
+            vt->render(b2, &f2, o2, 512);
+            for (int i = 0; i < 512; ++i) {
+                if (!std::isfinite(L2[i]) || !std::isfinite(R2[i])) finite441 = false;
+                peak441 = std::max(peak441, std::max(std::fabs(L2[i]), std::fabs(R2[i])));
+            }
+        }
+        vt->destroy(b2);
+    }
+    std::printf("44.1kHz hot+reverb: peak %.3f  finite %s\n", peak441, finite441 ? "yes" : "NO");
+
+    // --- CPU budget: small blocks, worst-case (both neural decoders every hop).
+    // The per-hop decoder+synth burst lands in one block; it must stay well
+    // inside real time so a small host buffer doesn't drop out.
+    float rtFrac = 0.f;
+    {
+        UPIBackend* b3 = vt->create();
+        UPIBackendConfig c3; std::memset(&c3, 0, sizeof(c3));
+        c3.sample_rate = 44100.0; c3.max_frames = 128; c3.channel_count = 2;
+        c3.resolve_resource = ddsp_smoke_resolve;
+        vt->prepare(b3, &c3);
+        float L3[128], R3[128]; float* o3[2] = { L3, R3 };
+        UPIControlFrame f3; std::memset(&f3, 0, sizeof(f3));
+        f3.version = UPI_CONTROL_FRAME_VERSION; f3.sample_rate = 44100.0;
+        f3.voice_count = 1; f3.voices[0].note_id = 1; f3.voices[0].note = 60;
+        f3.voices[0].gate = 1; f3.voices[0].velocity = 0.85f; f3.voices[0].pitch_hz = 261.63f;
+        f3.identity[0] = 0.5f;             // mid-morph → both decoders run
+        f3.macros[0] = 0.8f; f3.macros[5] = 0.3f;
+
+        const int nblk = (int)(44100.0 * 6 / 128);       // ~6 s
+        for (int i = 0; i < 8; ++i) { std::memset(L3,0,sizeof(L3)); vt->render(b3, &f3, o3, 128); } // warm
+        auto t0 = std::chrono::steady_clock::now();
+        for (int i = 0; i < nblk; ++i) { std::memset(L3,0,sizeof(L3)); vt->render(b3, &f3, o3, 128); }
+        auto t1 = std::chrono::steady_clock::now();
+        vt->destroy(b3);
+        const double cpuSec = std::chrono::duration<double>(t1 - t0).count();
+        rtFrac = (float)(cpuSec / (nblk * 128 / 44100.0));
+    }
+    std::printf("CPU: %.1f%% of real time @ 44.1k/128 (both decoders, mid-morph)\n", rtFrac * 100.f);
+
     if (rt < 1e-3f) { std::fprintf(stderr, "DDSP RENDER FAIL: silent trumpet\n"); return 1; }
     if (rc < 1e-3f) { std::fprintf(stderr, "DDSP RENDER FAIL: silent clarinet\n"); return 1; }
     if (diff < 0.3f) { std::fprintf(stderr, "DDSP RENDER FAIL: identity did not change timbre\n"); return 1; }
@@ -196,6 +260,9 @@ int main() {
     }
     if (stereo < 0.05f) { std::fprintf(stderr, "DDSP RENDER FAIL: reverb produced no stereo width\n"); return 1; }
     if (tailRatio < 1e-4f) { std::fprintf(stderr, "DDSP RENDER FAIL: no reverb tail past note-off\n"); return 1; }
+    if (!finite441) { std::fprintf(stderr, "DDSP RENDER FAIL: non-finite output at 44.1 kHz\n"); return 1; }
+    if (peak441 > 1.5f) { std::fprintf(stderr, "DDSP RENDER FAIL: runaway level at 44.1 kHz (peak %.2f)\n", peak441); return 1; }
+    if (rtFrac > 0.30f) { std::fprintf(stderr, "DDSP RENDER FAIL: too slow — %.0f%% of real time at 44.1k/128\n", rtFrac * 100.f); return 1; }
     std::printf("DDSP RENDER PASS\n");
     return 0;
 }

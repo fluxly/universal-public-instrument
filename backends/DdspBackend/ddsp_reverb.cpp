@@ -64,12 +64,16 @@ void PlateReverb::process(const float* in, float* outL, float* outR, int n, floa
     }
 
     for (int i = 0; i < n; ++i) {
-        const float x  = in[i] * kFixedGain;
+        const float x = std::isfinite(in[i]) ? in[i] * kFixedGain : 0.0f;
         float wl = 0.0f, wr = 0.0f;
         for (int c = 0; c < kCombs; ++c) { wl += combL_[c].process(x); wr += combR_[c].process(x); }
         for (int a = 0; a < kAllpass; ++a) { wl = apL_[a].process(wl); wr = apR_[a].process(wr); }
-        outL[i] = in[i] * dry + wl * wet;
-        outR[i] = in[i] * dry + wr * wet;
+        // A stray NaN/inf would otherwise recirculate in the feedback lines
+        // forever — scrub the whole tank if one appears.
+        if (!std::isfinite(wl) || !std::isfinite(wr)) { reset(); wl = wr = 0.0f; }
+        const float dryS = std::isfinite(in[i]) ? in[i] : 0.0f;
+        outL[i] = dryS * dry + wl * wet;
+        outR[i] = dryS * dry + wr * wet;
     }
 }
 

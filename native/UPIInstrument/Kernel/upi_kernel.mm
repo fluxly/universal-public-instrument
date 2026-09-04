@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cmath>
 #include <cstring>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -44,6 +45,11 @@ struct UPIKernel {
     UPIBackend             *backend = nullptr;
     std::string             backendId;
     std::string             instrumentJson;
+
+    // Guards the backend pointer + its prepare/reset/render/destroy. Held only
+    // briefly on the main thread (pack switch, (de)allocate); the audio thread
+    // try_locks it and renders silence for the one block a switch is in flight.
+    std::mutex              backendMx;
 
     // resource resolver, retained from set_backend so re-prepare() can still
     // resolve pack resources (e.g. libpd needs its patch path every prepare).
@@ -233,7 +239,7 @@ UPIKernel *upi_kernel_create(void) { return new (std::nothrow) UPIKernel(); }
 
 void upi_kernel_destroy(UPIKernel *k) {
     if (!k) return;
-    k->destroyBackend();
+    { std::lock_guard<std::mutex> lock(k->backendMx); k->destroyBackend(); }
     delete k;
 }
 
@@ -243,6 +249,8 @@ int32_t upi_kernel_set_backend(UPIKernel *k, const char *backend_id,
     if (!k || !backend_id) return -1;
     const UPIBackendVTable *vt = upi_registry_lookup(backend_id);
     if (!vt) return -1;
+
+    std::lock_guard<std::mutex> lock(k->backendMx);
 
     k->destroyBackend();
     k->vt = vt;
@@ -260,7 +268,7 @@ int32_t upi_kernel_set_backend(UPIKernel *k, const char *backend_id,
     cfg.resolve_resource = resolver;
     cfg.resolver_ctx     = ctx;
     cfg.instrument_json  = k->instrumentJson.c_str();
-    if (k->vt->prepare(k->backend, &cfg) != 0) return 3;
+    if (k->vt->prepare(k->backend, &cfg) != 0) { k->destroyBackend(); return 3; }
     return 0;
 }
 
@@ -271,6 +279,7 @@ int32_t upi_kernel_prepare(UPIKernel *k, double sample_rate,
     k->maxFrames    = max_frames ? max_frames : 512;
     k->channelCount = channel_count ? channel_count : 2;
     k->ensureScratch();
+    std::lock_guard<std::mutex> lock(k->backendMx);
     if (k->vt && k->backend) {
         UPIBackendConfig cfg{};
         cfg.sample_rate     = k->sampleRate;
@@ -288,6 +297,7 @@ void upi_kernel_reset(UPIKernel *k) {
     if (!k) return;
     k->allNotesOff();
     for (auto &c : k->channels) c = ChannelState{};
+    std::lock_guard<std::mutex> lock(k->backendMx);
     if (k->vt && k->backend) k->vt->reset(k->backend);
 }
 
@@ -341,8 +351,14 @@ void upi_kernel_render(UPIKernel *k,
     for (uint32_t ch = 0; ch < renderChans; ++ch)
         std::memset(k->planarPtrs[ch], 0, sizeof(float) * frames);
 
-    if (k->vt && k->backend && frames > 0)
-        k->vt->render(k->backend, &k->frame, k->planarPtrs.data(), frames);
+    // A pack switch on the main thread holds backendMx while it destroys/creates
+    // and prepares the backend. Don't wait for it on the audio thread — emit the
+    // silence we just cleared for that one block.
+    if (frames > 0) {
+        std::unique_lock<std::mutex> lock(k->backendMx, std::try_to_lock);
+        if (lock.owns_lock() && k->vt && k->backend)
+            k->vt->render(k->backend, &k->frame, k->planarPtrs.data(), frames);
+    }
 
     // Deliver to the host's (non-interleaved) buffer list. When the host hands
     // us a null mData we may point it at our scratch (zero-copy); otherwise copy.
