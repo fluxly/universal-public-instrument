@@ -5,6 +5,7 @@
 
 #include "oscillator_backend.h"
 #include "pd_backend.h"
+#include "ddsp_backend.h"
 // #include "mrt2_backend.h"   // later
 
 typedef struct RegistryRow {
@@ -15,6 +16,7 @@ typedef struct RegistryRow {
 static const RegistryRow kRows[] = {
     { "com.upi.backend.oscillator", upi_oscillator_backend_entry },
     { "com.upi.backend.libpd",      upi_pd_backend_entry },
+    { "com.upi.backend.ddsp",       upi_ddsp_backend_entry },
     // { "com.upi.backend.mrt2-small", upi_mrt2_backend_entry },
 };
 

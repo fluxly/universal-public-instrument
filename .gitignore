@@ -25,3 +25,13 @@ third_party/ravel/core-dist
 
 # Tauri generated
 src-tauri/gen/
+native/.signing-identity
+
+# DDSP model weights — large, derived from the DDSP-VST release.
+# Reproduce with: bash tools/ddsp-fetch-models.sh
+instrument-packs/*/backend/*.ddspw
+instrument-packs/*/backend/*.ref
+
+# Local research sandbox: a machine-specific symlink to an out-of-tree clone of
+# github.com/magenta/magenta-realtime (~4 GB, own git). See note [[mrt2-sandbox]].
+docs/chocolate-trumpet-sandbox

@@ -41,6 +41,7 @@ targets:
     sources:
       - path: ../backends/OscillatorBackend
       - path: ../backends/PdBackend
+      - path: ../backends/DdspBackend
       - path: ../backends/registry
     settings:
       base:
@@ -48,6 +49,7 @@ targets:
           - $(SRCROOT)/../backends/include
           - $(SRCROOT)/../backends/OscillatorBackend
           - $(SRCROOT)/../backends/PdBackend
+          - $(SRCROOT)/../backends/DdspBackend
           - $(SRCROOT)/../backends/registry
           - $(SRCROOT)/../third_party/libpd/libpd_wrapper
           - $(SRCROOT)/../third_party/libpd/pure-data/src
@@ -125,8 +127,9 @@ targets:
           set -euo pipefail
           DEST="${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}"
           mkdir -p "$DEST"
-          for pack in hello-sine hello-pd chocolate-trumpet; do
-            rsync -a --delete "${SRCROOT}/../instrument-packs/${pack}" "$DEST/"
+          for pack in hello-sine hello-pd hello-ddsp chocolate-trumpet; do
+            rsync -a --delete --exclude='*.ref' --exclude='README.md' \
+              "${SRCROOT}/../instrument-packs/${pack}" "$DEST/"
           done
 
 schemes:

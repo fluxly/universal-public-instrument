@@ -3,5 +3,7 @@ CompileFlags:
     - -I.
     - -Ibackends/include
     - -Ibackends/OscillatorBackend
+    - -Ibackends/PdBackend
+    - -Ibackends/DdspBackend
     - -Ibackends/registry
     - -Inative/UPIInstrument/Kernel

@@ -1,0 +1,14 @@
+{
+  "schemaVersion" : 1,
+  "packId" : "com.upi.instrument.hello-ddsp",
+  "name" : "Init",
+  "parameters" : {},
+  "macros" : {
+    "expression" : 0.8,
+    "identity" : 0.0,
+    "brightness" : 0.5,
+    "air" : 0.12,
+    "attack" : 0.2
+  },
+  "mpeBendRange" : 48
+}

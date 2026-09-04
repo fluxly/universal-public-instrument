@@ -11,6 +11,22 @@ SRC_APP="src-tauri/target/release/bundle/macos/UPI.app"
 APP="$HOME/Applications/UPI.app"   # pkd only trusts app extensions under /Applications or ~/Applications
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister
 
+echo "### 0/5  off-device DSP checks (no AU host needed)"
+mkdir -p "$ROOT/build"
+DDSP_SRC="backends/DdspBackend/ddsp_backend.cpp backends/DdspBackend/ddsp_synth.cpp backends/DdspBackend/ddsp_decoder.cpp"
+c++ -std=c++17 -O2 -I backends/DdspBackend tools/ddsp-decoder-smoke.cpp \
+    backends/DdspBackend/ddsp_decoder.cpp -o "$ROOT/build/ddsp-decoder-smoke"
+if [[ -f instrument-packs/hello-ddsp/backend/trumpet.ref ]]; then
+  for m in instrument-packs/hello-ddsp/backend/trumpet instrument-packs/hello-ddsp/backend/clarinet; do
+    "$ROOT/build/ddsp-decoder-smoke" "$m"
+  done
+else
+  echo "    (no DDSP model weights — skipping decoder check; run tools/ddsp-fetch-models.sh)"
+fi
+c++ -std=c++17 -O2 -I backends/include -I backends/DdspBackend \
+    tools/ddsp-render-smoke.cpp $DDSP_SRC -o "$ROOT/build/ddsp-render-smoke"
+"$ROOT/build/ddsp-render-smoke"
+
 echo "### 1/5  build .appex ($CONFIG)"
 CONFIG="$CONFIG" bash tools/build-au.sh
 
@@ -32,12 +48,13 @@ pluginkit -a "$APP/Contents/PlugIns/UPIInstrument.appex"
 sleep 2
 auval -v aumu UPIi UPI_ | tail -3
 
-echo "### 5/5  render / state / MPE / Pd / identity smoke tests"
+echo "### 5/5  render / state / MPE / Pd / identity / DDSP smoke tests"
 swift tools/render-smoke.swift
 swift tools/state-smoke.swift
 swift tools/mpe-smoke.swift
 swift tools/pd-smoke.swift
 swift tools/identity-smoke.swift
+swift tools/ddsp-smoke.swift
 
 echo
 echo "PHASE 0 SMOKE: all green"

@@ -31,7 +31,20 @@ DEFAULT_APP="src-tauri/target/release/bundle/macos/UPI.app"
 
 APP_PATH="${APP_PATH:-$DEFAULT_APP}"
 APPEX_PATH="${APPEX_PATH:-build/UPIInstrument.appex}"
+
+# Signing identity, in priority order:
+#   1. SIGN_IDENTITY env (explicit, e.g. a Developer ID for release)
+#   2. native/.signing-identity  (git-ignored; set by tools/set-signing-identity.sh)
+#   3. ad-hoc "-"
+# A stable identity (2) keeps macOS from re-prompting to approve the rebuilt
+# AUv3 extension every build.
+LOCAL_DEV_IDENTITY=""
+if [[ -z "${SIGN_IDENTITY:-}" && -s "$ROOT/native/.signing-identity" ]]; then
+  LOCAL_DEV_IDENTITY="$(tr -d '\n' < "$ROOT/native/.signing-identity")"
+  SIGN_IDENTITY="$LOCAL_DEV_IDENTITY"
+fi
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"
+echo "==> signing identity: $SIGN_IDENTITY"
 if [[ "$APP_PATH" == *"/UPI.app" ]]; then
   APP_ENTITLEMENTS="${APP_ENTITLEMENTS:-src-tauri/Entitlements.plist}"
 else
@@ -48,8 +61,9 @@ rm -rf "$APP_PATH/Contents/PlugIns/UPIInstrument.appex"
 cp -R "$APPEX_PATH" "$APP_PATH/Contents/PlugIns/UPIInstrument.appex"
 
 SIGN_FLAGS=(--force --timestamp --options runtime --generate-entitlement-der)
-if [[ "$SIGN_IDENTITY" == "-" ]]; then
-  SIGN_FLAGS=(--force --generate-entitlement-der)   # ad-hoc: no timestamp / hardened runtime
+if [[ "$SIGN_IDENTITY" == "-" || "$SIGN_IDENTITY" == "$LOCAL_DEV_IDENTITY" ]]; then
+  # local dev: no timestamp / hardened runtime (self-signed can't notarize anyway)
+  SIGN_FLAGS=(--force --generate-entitlement-der)
 fi
 
 echo "==> 2. sign nested code (inside-out), explicit entitlements, no --deep"
