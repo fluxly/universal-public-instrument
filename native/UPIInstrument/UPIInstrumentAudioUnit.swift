@@ -84,6 +84,25 @@ public final class UPIInstrumentAudioUnit: AUAudioUnit {
 
     public private(set) var loadedPack: InstrumentPack?
 
+    /// Fired after a successful `load()` with the new pack id — lets a hosting
+    /// view follow instrument changes driven from the host's own preset menu.
+    public var onInstrumentChange: ((String) -> Void)?
+
+    /// Instrument library in host-menu order, captured once. Factory-preset
+    /// numbers index into this. (Runtime pack downloads are a later phase.)
+    private lazy var catalogPacks: [InstrumentPack] = PackLibrary.shared.orderedForCatalog
+
+    /// One factory preset per instrument, named "<Group> — <Instrument>". Hosts
+    /// (Logic, MainStage, AU Lab) show these in the plug-in preset menu;
+    /// selecting one loads that pack.
+    private lazy var _factoryPresets: [AUAudioUnitPreset] = catalogPacks.enumerated().map {
+        let p = AUAudioUnitPreset()
+        p.number = $0.offset
+        p.name = "\($0.element.group) — \($0.element.name)"
+        return p
+    }
+    private var _currentPreset: AUAudioUnitPreset?
+
     // MARK: - init
 
     public override init(componentDescription: AudioComponentDescription,
@@ -152,6 +171,13 @@ public final class UPIInstrumentAudioUnit: AUAudioUnit {
         resolverBox = box   // outlive this call; kernel holds `ctx` for re-prepares
         loadedPack = pack
         rebuildParameterTree(for: pack)
+
+        // Voice the instrument to its shipped starting point. A saved project's
+        // preset (from `fullState`) is applied afterwards and takes precedence.
+        if let initPreset = pack.initPreset() { apply(initPreset) }
+        syncCurrentPreset(for: pack.id)
+        onInstrumentChange?(pack.id)
+
         Self.log.info("loaded pack \(pack.id, privacy: .public) backend \(pack.manifest.backend, privacy: .public)")
         return true
     }
@@ -295,6 +321,38 @@ public final class UPIInstrumentAudioUnit: AUAudioUnit {
             upi_kernel_render(kernel, timestamp, frameCount, outputData, realtimeEventListHead)
             return noErr
         }
+    }
+
+    // MARK: - factory presets (the instrument picker in a host)
+
+    public override var factoryPresets: [AUAudioUnitPreset]? { _factoryPresets }
+
+    public override var currentPreset: AUAudioUnitPreset? {
+        get { _currentPreset }
+        set {
+            guard let newValue else { setCurrentPreset(nil); return }
+            // number >= 0 → a factory preset (an instrument). number < 0 → a
+            // host user preset; unsupported for now (the app owns preset mgmt).
+            guard newValue.number >= 0, newValue.number < catalogPacks.count else { return }
+            let pack = catalogPacks[newValue.number]
+            if pack.id != loadedPack?.id {
+                load(packId: pack.id)          // also calls syncCurrentPreset
+            } else {
+                setCurrentPreset(_factoryPresets[newValue.number])
+            }
+        }
+    }
+
+    private func setCurrentPreset(_ preset: AUAudioUnitPreset?) {
+        guard preset?.number != _currentPreset?.number else { return }
+        willChangeValue(forKey: "currentPreset")
+        _currentPreset = preset
+        didChangeValue(forKey: "currentPreset")
+    }
+
+    /// Point `currentPreset` at the factory preset for a pack id (or nil).
+    private func syncCurrentPreset(for packId: String) {
+        setCurrentPreset(catalogPacks.firstIndex { $0.id == packId }.map { _factoryPresets[$0] })
     }
 
     // MARK: - state (instrument choice must round-trip through a saved project)

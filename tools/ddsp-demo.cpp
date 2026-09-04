@@ -2,8 +2,9 @@
 //
 //   c++ -std=c++17 -O2 -I backends/include -I backends/DdspBackend \
 //       tools/ddsp-demo.cpp backends/DdspBackend/ddsp_backend.cpp \
-//       backends/DdspBackend/ddsp_synth.cpp -o /tmp/ddsp-demo
-//   /tmp/ddsp-demo out.wav
+//       backends/DdspBackend/ddsp_synth.cpp backends/DdspBackend/ddsp_decoder.cpp \
+//       backends/DdspBackend/ddsp_reverb.cpp -o /tmp/ddsp-demo
+//   /tmp/ddsp-demo out.wav [reverbMix]
 //
 // Plays a short phrase (a few held notes) while sweeping the identity axis
 // Trumpet -> Clarinet, and writes a 48 kHz stereo float WAV.
@@ -51,6 +52,7 @@ static bool write_wav(const char* path, const std::vector<float>& inter, int sr,
 
 int main(int argc, char** argv) {
     const char* out = argc > 1 ? argv[1] : "ddsp-demo.wav";
+    const float reverb = argc > 2 ? (float)std::atof(argv[2]) : 0.25f;   // macros[5]
     const double SR = 48000.0;
 
     const UPIBackendVTable* vt = upi_ddsp_backend_entry();
@@ -66,10 +68,11 @@ int main(int argc, char** argv) {
     UPIControlFrame cf; std::memset(&cf, 0, sizeof(cf));
     cf.version = UPI_CONTROL_FRAME_VERSION;
     cf.sample_rate = SR;
-    cf.macros[0] = 0.85f;  // expression
-    cf.macros[2] = 0.5f;   // brightness
-    cf.macros[3] = 0.12f;  // air
-    cf.macros[4] = 0.15f;  // attack
+    cf.macros[0] = 0.85f;   // expression
+    cf.macros[2] = 0.5f;    // brightness
+    cf.macros[3] = 0.12f;   // air
+    cf.macros[4] = 0.15f;   // attack
+    cf.macros[5] = reverb;  // reverb mix
 
     // a little phrase: E3 G3 C4 E4, ~1.6 s each, last one held long
     const int   notes[]   = { 52, 55, 60, 64 };

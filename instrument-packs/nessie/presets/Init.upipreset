@@ -1,0 +1,23 @@
+{
+  "schemaVersion" : 1,
+  "packId" : "com.upi.instrument.nessie",
+  "name" : "Init",
+  "parameters" : {
+    "waveform" : 1,
+    "attack" : 0.35,
+    "decay" : 0.5,
+    "sustain" : 0.9,
+    "release" : 1.4,
+    "gain" : 0.8,
+    "glide" : 0.2,
+    "cutoff" : 0.5,
+    "noise" : 0.02
+  },
+  "macros" : {
+    "expression" : 0.8,
+    "brightness" : 0.5,
+    "air" : 0.02,
+    "attack" : 0.088
+  },
+  "mpeBendRange" : 48
+}

@@ -19,7 +19,7 @@ mkdir -p "$ROOT/build"
 # declares the decoders fails validation if they're absent.
 bash tools/ddsp-fetch-models.sh
 
-DDSP_SRC="backends/DdspBackend/ddsp_backend.cpp backends/DdspBackend/ddsp_synth.cpp backends/DdspBackend/ddsp_decoder.cpp"
+DDSP_SRC="backends/DdspBackend/ddsp_backend.cpp backends/DdspBackend/ddsp_synth.cpp backends/DdspBackend/ddsp_decoder.cpp backends/DdspBackend/ddsp_reverb.cpp"
 c++ -std=c++17 -O2 -I backends/DdspBackend tools/ddsp-decoder-smoke.cpp \
     backends/DdspBackend/ddsp_decoder.cpp -o "$ROOT/build/ddsp-decoder-smoke"
 for m in instrument-packs/hello-ddsp/backend/trumpet instrument-packs/hello-ddsp/backend/clarinet; do
@@ -50,13 +50,14 @@ pluginkit -a "$APP/Contents/PlugIns/UPIInstrument.appex"
 sleep 2
 auval -v aumu UPIi UPI_ | tail -3
 
-echo "### 5/5  render / state / MPE / Pd / identity / DDSP smoke tests"
+echo "### 5/5  render / state / MPE / Pd / identity / DDSP / picker smoke tests"
 swift tools/render-smoke.swift
 swift tools/state-smoke.swift
 swift tools/mpe-smoke.swift
 swift tools/pd-smoke.swift
 swift tools/identity-smoke.swift
 swift tools/ddsp-smoke.swift
+swift tools/instrument-picker-smoke.swift
 
 echo
 echo "PHASE 0 SMOKE: all green"

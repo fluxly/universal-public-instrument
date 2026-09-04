@@ -31,6 +31,32 @@ public final class PackLibrary {
         packs.first { $0.id == id }
     }
 
+    /// Packs in library / host-menu order: groups alphabetically, "Test Bench"
+    /// always last, packs by name within a group. Stable — factory-preset
+    /// numbers index into this.
+    public var orderedForCatalog: [InstrumentPack] {
+        packs.sorted { a, b in
+            let ga = a.group, gb = b.group
+            if ga != gb {
+                if ga == InstrumentPack.testBenchGroup { return false }
+                if gb == InstrumentPack.testBenchGroup { return true }
+                return ga.localizedCaseInsensitiveCompare(gb) == .orderedAscending
+            }
+            return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
+        }
+    }
+
+    /// `orderedForCatalog` bucketed by group, groups in the same order.
+    public var catalog: [(group: String, packs: [InstrumentPack])] {
+        var order: [String] = []
+        var byGroup: [String: [InstrumentPack]] = [:]
+        for pack in orderedForCatalog {
+            if byGroup[pack.group] == nil { order.append(pack.group) }
+            byGroup[pack.group, default: []].append(pack)
+        }
+        return order.map { ($0, byGroup[$0] ?? []) }
+    }
+
     // MARK: - internals
 
     static func searchDirectories() -> [URL] {

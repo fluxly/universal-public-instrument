@@ -5,6 +5,7 @@
   "version": "0.1.0",
   "backend": "com.upi.backend.libpd",
   "minExtensionVersion": "0.1",
+  "group": "Test Bench",
   "identityAxes": [],
   "macros": [
     { "id": "expression", "label": "Expression", "parameter": null },

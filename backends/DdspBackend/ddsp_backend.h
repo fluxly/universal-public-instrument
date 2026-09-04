@@ -15,7 +15,10 @@
  * ControlFrame -> synth (voice 0; monophonic):
  *   voices[0].pitch_hz / gate / velocity
  *   identity[0]   0 = trumpet ... 1 = clarinet
- *   macros[0] expression   macros[2] brightness   macros[3] air   macros[4] attack
+ *   macros[0] expression   macros[2] brightness   macros[3] air
+ *   macros[4] attack       macros[5] reverb mix
+ *
+ * Output is stereo (mono synth -> algorithmic stereo reverb, ddsp_reverb.h).
  */
 #ifndef UPI_DDSP_BACKEND_H
 #define UPI_DDSP_BACKEND_H

@@ -7,10 +7,16 @@ import UPIRuntime
 @MainActor
 final class InstrumentModel: ObservableObject {
 
+    /// All packs in library order (groups A–Z, "Test Bench" last).
     @Published var packs: [InstrumentPack]
+    /// The same list bucketed by group, for the sectioned instrument menu.
+    @Published var catalog: [(group: String, packs: [InstrumentPack])]
     @Published var selectedPackId: String
     @Published var macroValues: [String: Double] = [:]
     @Published var params: [ParamRow] = []
+
+    /// Display group of the loaded instrument ("Cryptid Garden", …).
+    var selectedGroup: String { packs.first { $0.id == selectedPackId }?.group ?? "" }
 
     struct ParamRow: Identifiable {
         let id: AUParameterAddress
@@ -26,10 +32,23 @@ final class InstrumentModel: ObservableObject {
 
     init(audioUnit: UPIInstrumentAudioUnit) {
         self.audioUnit = audioUnit
-        self.packs = PackLibrary.shared.packs
-        self.selectedPackId = audioUnit.loadedPack?.id ?? PackLibrary.shared.packs.first?.id ?? ""
+        self.packs = PackLibrary.shared.orderedForCatalog
+        self.catalog = PackLibrary.shared.catalog
+        self.selectedPackId = audioUnit.loadedPack?.id
+            ?? PackLibrary.shared.orderedForCatalog.first?.id ?? ""
         refreshFromTree()
         observeTree()
+
+        // Keep the picker in step when the instrument is changed from the host's
+        // own preset menu (factory presets) rather than from this view.
+        audioUnit.onInstrumentChange = { [weak self] packId in
+            Task { @MainActor in
+                guard let self, packId != self.selectedPackId else { return }
+                self.selectedPackId = packId
+                self.refreshFromTree()
+                self.observeTree()
+            }
+        }
     }
 
     var manifest: InstrumentManifest? {
@@ -131,20 +150,31 @@ struct MacroStripView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Text("UNIVERSAL PUBLIC INSTRUMENT")
-                    .font(.system(size: 11, weight: .regular, design: .monospaced))
-                    .foregroundStyle(pencil)
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("UNIVERSAL PUBLIC INSTRUMENT")
+                        .font(.system(size: 11, weight: .regular, design: .monospaced))
+                        .foregroundStyle(pencil)
+                    if !model.selectedGroup.isEmpty {
+                        Text(model.selectedGroup.uppercased())
+                            .font(.system(size: 9, weight: .regular, design: .monospaced))
+                            .foregroundStyle(fluoroCyan)
+                    }
+                }
                 Spacer()
                 Picker("", selection: Binding(
                     get: { model.selectedPackId },
                     set: { model.selectPack($0) })) {
-                    ForEach(model.packs, id: \.id) { pack in
-                        Text(pack.name).tag(pack.id)
+                    ForEach(model.catalog, id: \.group) { section in
+                        Section(section.group) {
+                            ForEach(section.packs, id: \.id) { pack in
+                                Text(pack.name).tag(pack.id)
+                            }
+                        }
                     }
                 }
                 .labelsHidden()
-                .frame(maxWidth: 180)
+                .frame(maxWidth: 200)
             }
 
             ForEach(model.manifest?.macros ?? [], id: \.id) { macro in

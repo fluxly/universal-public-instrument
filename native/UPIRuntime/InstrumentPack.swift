@@ -39,6 +39,9 @@ public struct InstrumentManifest: Codable, Sendable, Equatable {
     public let version: String
     public let backend: String
     public let minExtensionVersion: String?
+    /// Display group for the instrument library / host preset menu
+    /// ("Cryptid Garden", "Apocabilly Pawn Shop", …). Nil → "Test Bench".
+    public let group: String?
     public let identityAxes: [IdentityAxis]?
     public let macros: [MacroDef]
     public let resources: [String: String]?
@@ -56,6 +59,20 @@ public struct InstrumentPack: Sendable, Equatable {
 
     public var id: String { manifest.id }
     public var name: String { manifest.name }
+
+    /// Library / host-menu group. Ungrouped packs fall into "Test Bench".
+    public static let testBenchGroup = "Test Bench"
+    public var group: String {
+        let g = manifest.group?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return g.isEmpty ? Self.testBenchGroup : g
+    }
+
+    /// The pack's `presets/Init.upipreset`, if it ships one.
+    public func initPreset() -> InstrumentPreset? {
+        let url = root.appendingPathComponent("presets/Init.upipreset")
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? InstrumentPreset.decoded(from: data)
+    }
 
     /// Absolute path for a logical resource key (`"weights"`, `"patch"`, …).
     public func resourcePath(forKey key: String) -> String? {

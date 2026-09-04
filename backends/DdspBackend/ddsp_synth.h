@@ -6,14 +6,21 @@
  *
  * Driven once per 20 ms hop by a `DdspControls` struct — amplitude, a 60-wide
  * relative harmonic distribution, and 65 noise-band magnitudes. Where those
- * numbers come from (a hand-authored spectral model now, a trained GRU later)
- * is the control model's job, not the synth's.
+ * numbers come from (a trained GRU decoder, or the analytic fallback) is the
+ * control model's job, not the synth's.
+ *
+ * Both stages render directly at the host sample rate. DDSP-VST synthesises the
+ * noise at the model's 16 kHz and resamples the audio; doing the frequency-
+ * sampling FIR design at the host rate instead avoids the spectral images that
+ * upsample folds in above 8 kHz (measured ~20 dB down, 8-24 kHz).
  */
 #ifndef UPI_DDSP_SYNTH_H
 #define UPI_DDSP_SYNTH_H
 
 #include <cstdint>
 #include <vector>
+
+#include "ddsp_fft.h"
 
 namespace upi_ddsp {
 
@@ -51,20 +58,34 @@ private:
     std::vector<float> dist_;                     // masked/normalised distribution (scratch)
 };
 
-/// Frequency-sampling filtered white noise. Always renders at kModelSampleRate;
-/// the backend resamples the hop to the host rate.
+/// Frequency-sampling filtered white noise, rendered directly at the host rate.
+///
+/// The 65 band magnitudes describe the spectrum over [0, kModelSampleRate/2]
+/// (8 kHz — the model's Nyquist); everything above that is synthesised as
+/// silence. Designing the FIR at the host rate avoids the spectral images a
+/// 16 kHz -> host upsample of the noise hop would fold in above 8 kHz.
 class NoiseSynth {
 public:
-    void prepare();
+    /// `hopSamples` is the largest hop `render` will be asked for.
+    void prepare(double sampleRate, int hopSamples);
     void reset();
-    /// Writes `kModelHop` samples of filtered noise into `out`.
-    void render(const float* bands, float* out);
+    /// Writes `hop` host-rate samples of filtered noise into `out`.
+    void render(const float* bands, float* out, int hop);
 
 private:
-    static constexpr int kIrLen = (kNumNoiseBands - 1) * 2;   // 128
-    std::vector<float> hann_;                     // zero-phase Hann window, kIrLen
-    std::vector<float> ir_;                       // windowed impulse response
-    std::vector<float> noise_;                    // white-noise scratch
+    double sr_      = 48000.0;
+    int    irLen_   = 0;                          // FIR length (even), ~128 * sr/16k
+    int    magBins_ = 0;                          // irLen_/2 + 1
+    int    nfft_    = 0;                           // pow2 for the convolution
+    int    maxHop_  = 0;
+
+    std::vector<float> hann_;                     // Hann window, irLen_
+    std::vector<float> mag_;                      // host-rate magnitude spectrum, magBins_
+    std::vector<float> ir_;                       // windowed impulse response, irLen_
+    std::vector<float> noise_;                    // white-noise scratch, maxHop_ + irLen_
+    std::vector<Cx>    irScratch_;                // irfft scratch, irLen_
+    std::vector<Cx>    fftA_, fftB_;              // convolution scratch, nfft_
+
     uint32_t rng_ = 0x2545F491u;
 
     float whiteNoise() {

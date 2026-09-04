@@ -1,0 +1,23 @@
+{
+  "schemaVersion" : 1,
+  "packId" : "com.upi.instrument.gigafoot",
+  "name" : "Init",
+  "parameters" : {
+    "waveform" : 2,
+    "attack" : 0.04,
+    "decay" : 0.3,
+    "sustain" : 0.85,
+    "release" : 0.9,
+    "gain" : 0.85,
+    "glide" : 0.09,
+    "cutoff" : 0.33,
+    "noise" : 0.06
+  },
+  "macros" : {
+    "expression" : 0.85,
+    "brightness" : 0.33,
+    "air" : 0.06,
+    "attack" : 0.01
+  },
+  "mpeBendRange" : 48
+}

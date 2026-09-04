@@ -92,34 +92,67 @@ void HarmonicSynth::render(const DdspControls& c, float* out, int hop) {
 
 // ---- NoiseSynth -------------------------------------------------------------
 
-void NoiseSynth::prepare() {
-    hann_.assign(kIrLen, 0.0f);
-    for (int i = 0; i < kIrLen; ++i)
-        hann_[i] = 0.5f * (1.0f - std::cos(kTwoPi * (float)i / (float)kIrLen));
-    std::rotate(hann_.begin(), hann_.begin() + kIrLen / 2, hann_.end());   // zero-phase form
+void NoiseSynth::prepare(double sampleRate, int hopSamples) {
+    sr_     = sampleRate > 0 ? sampleRate : 48000.0;
+    maxHop_ = hopSamples > 0 ? hopSamples : 960;
 
-    ir_.assign(kIrLen, 0.0f);
-    noise_.assign(kModelHop + kIrLen, 0.0f);
+    // FIR length: the 16 kHz design is 128 taps ((kNumNoiseBands-1)*2); keep at
+    // least that much time support at the host rate. Must be a power of two —
+    // irfft_from_magnitudes()/fft() are radix-2.
+    const int base = (kNumNoiseBands - 1) * 2;
+    const double want = (double)base * sr_ / kModelSampleRate;
+    irLen_ = base;
+    while ((double)irLen_ < want) irLen_ <<= 1;
+    magBins_ = irLen_ / 2 + 1;
+
+    int need = (maxHop_ + irLen_) + irLen_ - 1;
+    nfft_ = 1;
+    while (nfft_ < need) nfft_ <<= 1;
+
+    hann_.assign(irLen_, 0.0f);
+    for (int i = 0; i < irLen_; ++i)
+        hann_[i] = 0.5f * (1.0f - std::cos(kTwoPi * (float)i / (float)irLen_));
+    std::rotate(hann_.begin(), hann_.begin() + irLen_ / 2, hann_.end());   // zero-phase form: peak at index 0
+
+    mag_.assign(magBins_, 0.0f);
+    ir_.assign(irLen_, 0.0f);
+    noise_.assign(maxHop_ + irLen_, 0.0f);
+    irScratch_.assign(irLen_, Cx{ 0.0f, 0.0f });
+    fftA_.assign(nfft_, Cx{ 0.0f, 0.0f });
+    fftB_.assign(nfft_, Cx{ 0.0f, 0.0f });
     reset();
 }
 
 void NoiseSynth::reset() { rng_ = 0x2545F491u; }
 
-void NoiseSynth::render(const float* bands, float* out) {
-    // frequency sampling: 65 band magnitudes -> 128-tap zero-phase IR
-    static constexpr int kNfft = 1024;                     // >= (kModelHop + kIrLen) + kIrLen - 1
-    Cx irScratch[kIrLen];
-    Cx convX[kNfft], convH[kNfft];
+void NoiseSynth::render(const float* bands, float* out, int hop) {
+    if (hop > maxHop_) hop = maxHop_;
 
-    irfft_from_magnitudes(bands, kNumNoiseBands, irScratch, ir_.data());
-    for (int i = 0; i < kIrLen; ++i) ir_[i] *= hann_[i];
-    std::rotate(ir_.begin(), ir_.begin() + kIrLen / 2, ir_.end());          // -> causal / linear phase
+    // Resample the 65 band magnitudes (spanning [0, kModelSampleRate/2]) onto
+    // the host-rate one-sided spectrum; zero above the model's 8 kHz Nyquist.
+    const float bandHz  = 0.5f * (float)kModelSampleRate;
+    const float binHz   = (float)sr_ / (float)irLen_;
+    const float perBand = bandHz / (float)(kNumNoiseBands - 1);
+    for (int k = 0; k < magBins_; ++k) {
+        const float f = (float)k * binHz;
+        if (f >= bandHz) { mag_[k] = 0.0f; continue; }
+        const float pos = f / perBand;
+        const int   i0  = (int)pos;
+        const float fr  = pos - (float)i0;
+        const int   i1  = i0 + 1 < kNumNoiseBands ? i0 + 1 : kNumNoiseBands - 1;
+        mag_[k] = bands[i0] + (bands[i1] - bands[i0]) * fr;
+    }
 
-    for (int i = 0; i < kModelHop + kIrLen; ++i) noise_[i] = whiteNoise();
+    // frequency sampling: magnitude spectrum -> linear-phase Hann-windowed FIR
+    irfft_from_magnitudes(mag_.data(), magBins_, irScratch_.data(), ir_.data());
+    for (int i = 0; i < irLen_; ++i) ir_[i] *= hann_[i];
+    std::rotate(ir_.begin(), ir_.begin() + irLen_ / 2, ir_.end());          // -> causal / linear phase
 
-    fft_convolve(noise_.data(), kModelHop + kIrLen, ir_.data(), kIrLen,
-                 convX, convH, kNfft,
-                 out, kModelHop, (kIrLen - 1) / 2 - 1);      // FIR group-delay trim
+    for (int i = 0; i < hop + irLen_; ++i) noise_[i] = whiteNoise();
+
+    fft_convolve(noise_.data(), hop + irLen_, ir_.data(), irLen_,
+                 fftA_.data(), fftB_.data(), nfft_,
+                 out, hop, irLen_ / 2);                     // FIR group-delay trim
 }
 
 } // namespace upi_ddsp

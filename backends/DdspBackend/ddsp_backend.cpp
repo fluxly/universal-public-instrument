@@ -6,6 +6,7 @@
 #include "ddsp_backend.h"
 #include "ddsp_synth.h"
 #include "ddsp_decoder.h"
+#include "ddsp_reverb.h"
 
 #include <algorithm>
 #include <cmath>
@@ -100,6 +101,7 @@ struct DdspBackend {
 
     HarmonicSynth harmonic;
     NoiseSynth    noise;
+    PlateReverb   reverb;
     AREnvelope    env;
 
     // trained DDSP decoders — endpoint A (identity 0) and B (identity 1).
@@ -115,8 +117,10 @@ struct DdspBackend {
 
     // per-hop scratch (sized in prepare)
     std::vector<float> hopHarm;          // hopHost
-    std::vector<float> hopNoise16;       // kModelHop
-    float lastNoise = 0.0f;
+    std::vector<float> hopNoise;         // hopHost (host-rate filtered noise)
+
+    // output-block scratch (sized in prepare): mono synth -> stereo reverb
+    std::vector<float> blkMono, blkL, blkR;
 
     // output ring (mono)
     std::vector<float> ring;
@@ -126,11 +130,10 @@ struct DdspBackend {
     void ringPush(const float* mono, size_t n) {
         for (size_t i = 0; i < n; ++i) { ring[ringHead] = mono[i]; ringHead = (ringHead + 1) % ringCap; }
     }
-    void ringPop(float* const* out, uint32_t chans, uint32_t frames) {
+    void ringPopMono(float* dst, uint32_t frames) {
         for (uint32_t f = 0; f < frames; ++f) {
-            const float s = ring[ringTail];
+            dst[f] = ring[ringTail];
             ringTail = (ringTail + 1) % ringCap;
-            for (uint32_t c = 0; c < chans; ++c) out[c][f] = s;
         }
     }
 
@@ -176,21 +179,13 @@ struct DdspBackend {
             noiseScale = ctl.amplitude;
         }
 
-        // --- synth ---
+        // --- synth (both at the host rate) ---
         std::fill(hopHarm.begin(), hopHarm.end(), 0.0f);
         harmonic.render(ctl, hopHarm.data(), hopHost);
-        noise.render(ctl.noiseBands, hopNoise16.data());
+        noise.render(ctl.noiseBands, hopNoise.data(), hopHost);
 
-        // upsample the 16 kHz noise hop to the host rate (linear) and mix
-        for (int j = 0; j < hopHost; ++j) {
-            const float sp  = (float)j / srRatio;
-            const int   i0  = (int)sp;
-            const float fr  = sp - (float)i0;
-            const float a   = (i0 < kModelHop) ? hopNoise16[i0] : lastNoise;
-            const float bb  = (i0 + 1 < kModelHop) ? hopNoise16[i0 + 1] : lastNoise;
-            hopHarm[j] = (hopHarm[j] + lerpf(a, bb, fr) * noiseScale) * 0.5f;   // + headroom
-        }
-        lastNoise = hopNoise16[kModelHop - 1];
+        for (int j = 0; j < hopHost; ++j)
+            hopHarm[j] = (hopHarm[j] + hopNoise[j] * noiseScale) * 0.5f;   // + headroom
 
         ringPush(hopHarm.data(), (size_t)hopHost);
     }
@@ -198,7 +193,7 @@ struct DdspBackend {
     // control atomics are simple floats written from render() only (audio
     // thread), so plain members are fine here.
     float gControlIdentity = 0.0f, gControlExpr = 0.8f, gControlBright = 0.5f;
-    float gControlAir = 0.12f, gControlAttack = 0.2f;
+    float gControlAir = 0.12f, gControlAttack = 0.2f, gControlReverb = 0.2f;
 };
 
 // Read a whole file into `dst`. prepare()-time only (not realtime).
@@ -237,9 +232,9 @@ int32_t ddsp_prepare(UPIBackend *self, const UPIBackendConfig *cfg) {
     b->hopHost = (int)std::lround((double)kModelHop * b->srRatio);
 
     b->harmonic.prepare(b->sampleRate, b->hopHost);
-    b->noise.prepare();
+    b->noise.prepare(b->sampleRate, b->hopHost);
+    b->reverb.prepare(b->sampleRate);
     b->env = AREnvelope{};
-    b->lastNoise = 0.0f;
 
     // trained DDSP endpoints (identity 0 / 1). Both must load, else fall back
     // to the analytic control model.
@@ -256,7 +251,10 @@ int32_t ddsp_prepare(UPIBackend *self, const UPIBackendConfig *cfg) {
     }
 
     b->hopHarm.assign((size_t)b->hopHost, 0.0f);
-    b->hopNoise16.assign((size_t)kModelHop, 0.0f);
+    b->hopNoise.assign((size_t)b->hopHost, 0.0f);
+    b->blkMono.assign((size_t)b->maxFrames, 0.0f);
+    b->blkL.assign((size_t)b->maxFrames, 0.0f);
+    b->blkR.assign((size_t)b->maxFrames, 0.0f);
 
     const size_t worst = (size_t)b->maxFrames + (size_t)b->hopHost + 1;
     b->ringCap = worst;
@@ -272,11 +270,11 @@ void ddsp_reset(UPIBackend *self) {
     if (!b) return;
     b->harmonic.reset();
     b->noise.reset();
+    b->reverb.reset();
     b->decoderA.reset();
     b->decoderB.reset();
     b->env = AREnvelope{};
     b->gate = false; b->velocity = 0.0f;
-    b->lastNoise = 0.0f;
     b->ringHead = b->ringTail = 0;
     std::fill(b->ring.begin(), b->ring.end(), 0.0f);
 }
@@ -288,7 +286,7 @@ void ddsp_get_capabilities(UPIBackend *, UPIBackendCapabilities *out) {
     out->max_voices          = 1;
     out->continuous_identity = 1;                 // genuine continuous timbre morph
     out->latency_frames      = 0;                 // ring stays <= 1 hop behind
-    out->tail_frames         = 0;
+    out->tail_frames         = (uint32_t)(PlateReverb::kTailSeconds * 48000.0f);
 }
 
 uint32_t ddsp_parameter_count(UPIBackend *) { return 0; }
@@ -319,9 +317,23 @@ void ddsp_render(UPIBackend *self, const UPIControlFrame *cf,
     b->gControlBright   = cf->macros[2];
     b->gControlAir      = cf->macros[3];
     b->gControlAttack   = cf->macros[4];
+    b->gControlReverb   = cf->macros[5];
+
+    if (frames > b->maxFrames) frames = b->maxFrames;   // scratch is sized to maxFrames
 
     while (b->ringCount() < (size_t)frames) b->renderHop();
-    b->ringPop(out, chans, frames);
+    b->ringPopMono(b->blkMono.data(), frames);
+    b->reverb.process(b->blkMono.data(), b->blkL.data(), b->blkR.data(),
+                      (int)frames, clampf(b->gControlReverb, 0.0f, 1.0f));
+
+    for (uint32_t f = 0; f < frames; ++f) {
+        const float L = b->blkL[f], R = b->blkR[f];
+        if (chans == 1) {
+            out[0][f] = 0.5f * (L + R);
+        } else {
+            for (uint32_t c = 0; c < chans; ++c) out[c][f] = (c & 1u) ? R : L;
+        }
+    }
 }
 
 } // namespace

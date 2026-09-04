@@ -1148,9 +1148,22 @@ without a resolver.
 >   `tools/ddsp-convert.py` → `.ddspw` blob; C++ port is bit-exact vs TFLite
 >   (`ddsp-decoder-smoke`, max|Δ| ~1e-6). Blobs are **git-ignored**, fetched by
 >   `tools/ddsp-fetch-models.sh` (sha256-pinned zip, deterministic conversion).
-> - **`chocolate-trumpet` repointed** `libpd` → `ddsp` (v1.1.0); the Pd patch is
->   gone. `hello-ddsp` is the minimal demo pack. On-device `identity-smoke` /
+> - **`chocolate-trumpet` repointed** `libpd` → `ddsp`; the Pd patch is gone.
+>   `hello-ddsp` is the minimal demo pack. On-device `identity-smoke` /
 >   `ddsp-smoke`: trumpet spectrally brighter than clarinet, Δrms ~1.
+> - **Noise synth fixed** to render at the host rate (was 16 kHz → linear
+>   upsample, folding images above 8 kHz). **Algorithmic stereo reverb** added
+>   (`ddsp_reverb.{h,cpp}`, Freeverb); output is now stereo; `reverb` = `macros[5]`.
+
+> **Instrument picker (2026-09-04):** instruments are organised into display
+> **groups**. Manifest gains `group` (nil → "Test Bench"). Two real groups so
+> far: **Cryptid Garden** (Gigafoot, Nessie — oscillator stubs) and **Apocabilly
+> Pawn Shop** (Chocolate Trumpet, Urdyhay Urddygay — stub). The AU exposes the
+> library as **`factoryPresets`** ("<Group> — <Instrument>", Test Bench last);
+> `currentPreset` loads the pack, so any AU host (Logic, MainStage, AU Lab) is
+> the picker. `load()` now applies the pack's `Init.upipreset` (a saved project's
+> preset still wins). `tools/instrument-picker-smoke.swift` covers it. A custom
+> in-plugin browser view is a later step.
 
 ## Extension
 

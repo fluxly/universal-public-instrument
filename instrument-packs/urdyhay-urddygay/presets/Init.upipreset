@@ -1,0 +1,23 @@
+{
+  "schemaVersion" : 1,
+  "packId" : "com.upi.instrument.urdyhay-urddygay",
+  "name" : "Init",
+  "parameters" : {
+    "waveform" : 3,
+    "attack" : 0.004,
+    "decay" : 0.06,
+    "sustain" : 1.0,
+    "release" : 0.18,
+    "gain" : 0.72,
+    "glide" : 0.0,
+    "cutoff" : 0.72,
+    "noise" : 0.09
+  },
+  "macros" : {
+    "expression" : 0.72,
+    "brightness" : 0.72,
+    "air" : 0.09,
+    "attack" : 0.001
+  },
+  "mpeBendRange" : 48
+}

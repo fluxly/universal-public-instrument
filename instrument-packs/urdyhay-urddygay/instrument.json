@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "com.upi.instrument.urdyhay-urddygay",
+  "name": "Urdyhay Urddygay",
+  "version": "0.1.0",
+  "backend": "com.upi.backend.oscillator",
+  "minExtensionVersion": "1.0",
+  "group": "Apocabilly Pawn Shop",
+  "identityAxes": [],
+  "macros": [
+    { "id": "expression", "label": "Expression", "parameter": "gain",   "default": 0.72 },
+    { "id": "identity",   "label": "Identity",   "parameter": null },
+    { "id": "brightness", "label": "Brightness", "parameter": "cutoff", "default": 0.72 },
+    { "id": "air",        "label": "Air",        "parameter": "noise",  "default": 0.09 },
+    { "id": "attack",     "label": "Attack",     "parameter": "attack", "default": 0.001 }
+  ],
+  "resources": {}
+}

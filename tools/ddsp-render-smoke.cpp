@@ -3,11 +3,13 @@
 // Compiles the backend straight into a host binary (no AU, no sandbox) and
 // drives it through the C ABI with a synthetic ControlFrame: hold a note,
 // render ~1 s at identity 0 (trumpet) and identity 1 (clarinet), assert both
-// are non-silent and that trumpet is spectrally brighter than clarinet.
+// are non-silent, trumpet is spectrally brighter than clarinet, nothing leaks
+// above the model's 8 kHz band limit, and the reverb makes stereo + a tail.
 //
 //   c++ -std=c++17 -O2 -I backends/include -I backends/DdspBackend \
 //       tools/ddsp-render-smoke.cpp backends/DdspBackend/ddsp_backend.cpp \
 //       backends/DdspBackend/ddsp_synth.cpp backends/DdspBackend/ddsp_decoder.cpp \
+//       backends/DdspBackend/ddsp_reverb.cpp \
 //       -o /tmp/ddsp-render-smoke && /tmp/ddsp-render-smoke
 //
 // If instrument-packs/hello-ddsp/backend/{trumpet,clarinet}.ddspw exist it
@@ -15,6 +17,7 @@
 
 #include "upi_backend.h"
 #include "ddsp_backend.h"
+#include "ddsp_fft.h"
 
 #include <cmath>
 #include <cstdio>
@@ -49,6 +52,32 @@ static float tilt(const std::vector<float>& x) {
     for (size_t i = 1; i < x.size(); ++i) d[i - 1] = x[i] - x[i - 1];
     float r = rms(x);
     return r > 0.f ? rms(d) / r : 0.f;
+}
+
+// Spectral energy above 8 kHz relative to the octave just below it (6-8 kHz),
+// at 48 kHz. The model band-limits everything to 8 kHz (harmonics are decoder-
+// masked, the noise FIR is designed to 8 kHz), so the response should fall off
+// a cliff there. A 16 kHz noise hop upsampled to the host rate instead folds
+// spectral images into 8-24 kHz, lifting this ratio ~15-30x.
+static float hfLeak(const std::vector<float>& x) {
+    using namespace upi_ddsp;
+    const int N = 32768;
+    if ((int)x.size() < N) return 0.f;
+    std::vector<Cx> a(N);
+    for (int i = 0; i < N; ++i) {
+        const float w = 0.5f * (1.f - std::cos(6.2831853f * i / (N - 1)));  // Hann
+        a[i] = Cx{ x[i] * w, 0.f };
+    }
+    fft(a.data(), N, false);
+    const double binHz = 48000.0 / N;
+    double lo = 0, hi = 0;
+    for (int k = 1; k < N / 2; ++k) {
+        const double f = k * binHz;
+        const double e = (double)a[k].re * a[k].re + (double)a[k].im * a[k].im;
+        if (f >= 6000.0 && f < 8000.0)        lo += e;
+        else if (f >= 9000.0 && f < 20000.0)  hi += e;
+    }
+    return lo > 0 ? (float)(hi / lo) : 0.f;
 }
 
 static std::vector<float> renderNote(const UPIBackendVTable* vt, UPIBackend* b,
@@ -119,10 +148,41 @@ int main() {
     }
     float diff = n ? std::sqrt(diffSq / n) : 0.f;
 
+    const float hlT = hfLeak(trumpet), hlC = hfLeak(clarinet);
+
     std::printf("caps: continuous_identity=%d latency=%u\n",
                 caps.continuous_identity, caps.latency_frames);
     std::printf("trumpet rms %.4f tilt %.3f  ·  clarinet rms %.4f tilt %.3f  ·  Δrms %.2f\n",
                 rt, tt, rc, tc, diff);
+    std::printf(">8kHz spectral leak (vs 6-8kHz): trumpet %.3f  clarinet %.3f  (band-limited: expect < 0.05)\n",
+                hlT, hlC);
+
+    // --- reverb: stereo output + a tail past note-off ---------------------
+    vt->reset(b);
+    const uint32_t rb = 512;
+    float L[512], R[512]; float* rout[2] = { L, R };
+    UPIControlFrame cf; std::memset(&cf, 0, sizeof(cf));
+    cf.version = UPI_CONTROL_FRAME_VERSION; cf.sample_rate = 48000.0;
+    cf.voice_count = 1;
+    cf.voices[0].note_id = 1; cf.voices[0].note = 57;
+    cf.voices[0].velocity = 0.9f; cf.voices[0].pitch_hz = 220.0f;
+    cf.macros[0] = 0.8f; cf.macros[3] = 0.12f; cf.macros[4] = 0.2f;
+    cf.macros[5] = 0.6f;                                  // reverb mix
+
+    double stereoNum = 0, stereoDen = 0, heldE = 0, tailE = 0;
+    for (int blk = 0; blk < 200; ++blk) {                 // ~2.1 s
+        cf.voices[0].gate = blk < 60 ? 1 : 0;             // release at ~0.64 s
+        std::memset(L, 0, sizeof(L)); std::memset(R, 0, sizeof(R));
+        vt->render(b, &cf, rout, rb);
+        for (uint32_t i = 0; i < rb; ++i) {
+            const double d = (double)L[i] - R[i], s = (double)L[i] + R[i];
+            if (blk >= 20 && blk < 60) { stereoNum += d * d; stereoDen += s * s; heldE += s * s; }
+            if (blk >= 90 && blk < 150) tailE += s * s;   // ~0.3 s, starting well after release
+        }
+    }
+    const float stereo = stereoDen > 0 ? (float)std::sqrt(stereoNum / stereoDen) : 0.f;
+    const float tailRatio = heldE > 0 ? (float)(tailE / heldE) : 0.f;
+    std::printf("reverb: stereo decorrelation %.3f  ·  tail/held energy %.3f\n", stereo, tailRatio);
 
     vt->destroy(b);
 
@@ -130,6 +190,12 @@ int main() {
     if (rc < 1e-3f) { std::fprintf(stderr, "DDSP RENDER FAIL: silent clarinet\n"); return 1; }
     if (diff < 0.3f) { std::fprintf(stderr, "DDSP RENDER FAIL: identity did not change timbre\n"); return 1; }
     if (tt <= tc) { std::fprintf(stderr, "DDSP RENDER FAIL: trumpet not brighter than clarinet\n"); return 1; }
+    if (hlT > 0.05f || hlC > 0.05f) {
+        std::fprintf(stderr, "DDSP RENDER FAIL: excess energy above 8 kHz (noise resampling images?)\n");
+        return 1;
+    }
+    if (stereo < 0.05f) { std::fprintf(stderr, "DDSP RENDER FAIL: reverb produced no stereo width\n"); return 1; }
+    if (tailRatio < 1e-4f) { std::fprintf(stderr, "DDSP RENDER FAIL: no reverb tail past note-off\n"); return 1; }
     std::printf("DDSP RENDER PASS\n");
     return 0;
 }
