@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "id": "com.upi.instrument.chocolate-trumpet",
   "name": "Chocolate Trumpet",
-  "version": "1.0.0",
-  "backend": "com.upi.backend.libpd",
+  "version": "1.1.0",
+  "backend": "com.upi.backend.ddsp",
   "minExtensionVersion": "1.0",
   "identityAxes": [
     { "id": "brass_reed", "label": "Trumpet ↔ Clarinet" }
@@ -16,6 +16,7 @@
     { "id": "attack",     "label": "Attack",             "parameter": null,           "default": 0.2 }
   ],
   "resources": {
-    "patch": "backend/chocolate-trumpet.pd"
+    "decoder_a": "backend/trumpet.ddspw",
+    "decoder_b": "backend/clarinet.ddspw"
   }
 }

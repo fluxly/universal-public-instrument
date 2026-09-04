@@ -17,5 +17,8 @@ extracts `Trumpet.tflite` / `Clarinet.tflite`, and converts each with
 `tools/ddsp-convert.py`. The conversion is deterministic — the blobs are
 bit-identical run to run.
 
-Without them the backend falls back to its analytic trumpet/clarinet model, so
-the app still builds and runs; `tools/smoke.sh` skips the decoder check.
+The pack **will not load without them** — the manifest declares both decoders
+as required resources and `InstrumentPack.validate` rejects a missing resource.
+`tools/smoke.sh` runs the fetch automatically. (The backend does carry an
+analytic trumpet/clarinet fallback for the case where a pack ships no decoders
+at all — e.g. `tools/ddsp-render-smoke.cpp` with the files removed.)

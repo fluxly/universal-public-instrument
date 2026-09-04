@@ -1134,8 +1134,23 @@ without a resolver.
 >   saw↔square morph on identity, brightness→lowpass, air→noise, attack→env
 >   slew, expression→gain. Bundled alongside the hello packs.
 >
-> **Not yet:** the real "learned acoustic identity" (that's the DDSP/neural
-> pass); App library/store UI; Runtime bridge; artwork; DAW listen test.
+> **Not yet:** App library/store UI; Runtime bridge; artwork; DAW listen test.
+
+> **DDSP neural backend (2026-09-04), `tools/smoke.sh` green Debug + Release:**
+> - **`backends/DdspBackend/`** (`com.upi.backend.ddsp`) — additive harmonic +
+>   frequency-sampled filtered noise, de-JUCE'd from `magenta/ddsp-vst`
+>   (Apache-2.0). Control model is a hand-rolled DDSP `RnnFcDecoder` forward pass
+>   (`ddsp_decoder.cpp`, no deps): per 50 Hz hop `(f0, loudness)` → amplitude +
+>   60 harmonic amps + 65 noise bands. Two decoders (trumpet, clarinet) run
+>   every hop; outputs lerp by `identity[0]`. Analytic fallback if a pack ships
+>   no decoders. Mono, `continuous_identity=1`, 0-latency ring.
+> - Weights convert from the DDSP-VST `.tflite` release via
+>   `tools/ddsp-convert.py` → `.ddspw` blob; C++ port is bit-exact vs TFLite
+>   (`ddsp-decoder-smoke`, max|Δ| ~1e-6). Blobs are **git-ignored**, fetched by
+>   `tools/ddsp-fetch-models.sh` (sha256-pinned zip, deterministic conversion).
+> - **`chocolate-trumpet` repointed** `libpd` → `ddsp` (v1.1.0); the Pd patch is
+>   gone. `hello-ddsp` is the minimal demo pack. On-device `identity-smoke` /
+>   `ddsp-smoke`: trumpet spectrally brighter than clarinet, Δrms ~1.
 
 ## Extension
 

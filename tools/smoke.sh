@@ -13,16 +13,18 @@ LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Versions/A/Framewor
 
 echo "### 0/5  off-device DSP checks (no AU host needed)"
 mkdir -p "$ROOT/build"
+
+# DDSP model weights (git-ignored). Populates every ddsp pack; cached after the
+# first ~77 MB download. The ddsp / identity smokes below need them — a pack that
+# declares the decoders fails validation if they're absent.
+bash tools/ddsp-fetch-models.sh
+
 DDSP_SRC="backends/DdspBackend/ddsp_backend.cpp backends/DdspBackend/ddsp_synth.cpp backends/DdspBackend/ddsp_decoder.cpp"
 c++ -std=c++17 -O2 -I backends/DdspBackend tools/ddsp-decoder-smoke.cpp \
     backends/DdspBackend/ddsp_decoder.cpp -o "$ROOT/build/ddsp-decoder-smoke"
-if [[ -f instrument-packs/hello-ddsp/backend/trumpet.ref ]]; then
-  for m in instrument-packs/hello-ddsp/backend/trumpet instrument-packs/hello-ddsp/backend/clarinet; do
-    "$ROOT/build/ddsp-decoder-smoke" "$m"
-  done
-else
-  echo "    (no DDSP model weights — skipping decoder check; run tools/ddsp-fetch-models.sh)"
-fi
+for m in instrument-packs/hello-ddsp/backend/trumpet instrument-packs/hello-ddsp/backend/clarinet; do
+  "$ROOT/build/ddsp-decoder-smoke" "$m"
+done
 c++ -std=c++17 -O2 -I backends/include -I backends/DdspBackend \
     tools/ddsp-render-smoke.cpp $DDSP_SRC -o "$ROOT/build/ddsp-render-smoke"
 "$ROOT/build/ddsp-render-smoke"

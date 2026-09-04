@@ -2,10 +2,11 @@
 //
 //   swift tools/identity-smoke.swift
 //
-// Loads the "chocolate-trumpet" pack (libpd backend, one identity axis
+// Loads the "chocolate-trumpet" pack (com.upi.backend.ddsp, one identity axis
 // Trumpet↔Clarinet), plays one note at axis position 0.0 and again at 1.0, and
 // checks that (a) both renders are non-silent and (b) the timbre actually
-// changed — the two waveforms, RMS-normalised, differ materially.
+// changed — the two waveforms, RMS-normalised, differ materially. Needs the
+// DDSP model weights (tools/ddsp-fetch-models.sh; smoke.sh fetches them).
 
 import AVFoundation
 
